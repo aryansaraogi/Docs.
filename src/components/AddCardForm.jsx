@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { IoCloseSharp } from "react-icons/io5";
+import { LuUpload } from "react-icons/lu";
 import { motion, AnimatePresence } from "framer-motion";
 import { CARD_COLORS, DEFAULT_TAG } from "../constants";
+import { baseName, formatBytes, getFileIcon } from "../fileUtils";
 
 function AddCardForm({ onAdd, onClose }) {
   const [form, setForm] = useState({
@@ -10,7 +12,24 @@ function AddCardForm({ onAdd, onClose }) {
     filesize: "",
     cardColor: "zinc",
     tag: { ...DEFAULT_TAG },
+    file: null,
   });
+  const [zoneActive, setZoneActive] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // A chosen file fills in an empty title and turns on the Download banner (can still be unticked)
+  const pickFile = (file) => {
+    if (!file) return;
+    setError("");
+    setForm((prev) => ({
+      ...prev,
+      file,
+      title: prev.title.trim() ? prev.title : baseName(file.name),
+      tag: { ...prev.tag, isOpen: true },
+    }));
+  };
+  const FileIcon = getFileIcon(form.file);
 
   // Close on Escape
   useEffect(() => {
@@ -30,10 +49,18 @@ function AddCardForm({ onAdd, onClose }) {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.title.trim()) return;
-    onAdd({ ...form, title: form.title.trim() });
+    if (!form.title.trim() || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      // On success the form is closed (unmounted) by the parent
+      await onAdd({ ...form, title: form.title.trim() });
+    } catch {
+      setError("Couldn't save the file. Browser storage may be full.");
+      setSaving(false);
+    }
   };
 
   return (
@@ -70,6 +97,47 @@ function AddCardForm({ onAdd, onClose }) {
         <h2 id="add-card-title" className="text-lg font-bold mb-6 tracking-tight">New Document</h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* File — picker or drop; the drop is stopped here so the page doesn't also handle it */}
+          {form.file ? (
+            <div className="flex items-center gap-3 bg-zinc-800 rounded-xl px-4 py-3">
+              <FileIcon className="text-zinc-400 shrink-0" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm truncate">{form.file.name}</p>
+                <p className="text-xs text-zinc-500">{formatBytes(form.file.size)}</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Remove file"
+                onClick={() => setForm((prev) => ({ ...prev, file: null }))}
+                className="w-6 h-6 bg-zinc-700 rounded-full flex items-center justify-center shrink-0 hover:bg-zinc-500 transition-colors"
+              >
+                <IoCloseSharp size="0.8em" />
+              </button>
+            </div>
+          ) : (
+            <label
+              onDragOver={(e) => {
+                e.preventDefault();
+                setZoneActive(true);
+              }}
+              onDragLeave={() => setZoneActive(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setZoneActive(false);
+                pickFile(e.dataTransfer.files[0]);
+              }}
+              className={`flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-5 text-center cursor-pointer transition-colors focus-within:ring-1 focus-within:ring-zinc-400 [&>*]:pointer-events-none ${
+                zoneActive ? "border-zinc-300 bg-zinc-800" : "border-zinc-700 hover:border-zinc-500"
+              }`}
+            >
+              <LuUpload className="text-zinc-400 text-lg" aria-hidden="true" />
+              <span className="text-sm text-zinc-300">Choose a file or drop it here</span>
+              <span className="text-xs text-zinc-500">Stored only in this browser</span>
+              <input type="file" className="sr-only" onChange={(e) => pickFile(e.target.files[0])} />
+            </label>
+          )}
+
           <div className="flex flex-col gap-1">
             <label htmlFor="card-title" className="text-xs text-zinc-400 font-medium">Title *</label>
             <input
@@ -97,17 +165,20 @@ function AddCardForm({ onAdd, onClose }) {
             />
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label htmlFor="card-filesize" className="text-xs text-zinc-400 font-medium">File Size</label>
-            <input
-              id="card-filesize"
-              name="filesize"
-              value={form.filesize}
-              onChange={handleChange}
-              placeholder="e.g. 1.2mb"
-              className="bg-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-zinc-400 placeholder:text-zinc-600"
-            />
-          </div>
+          {/* A real file's size is automatic */}
+          {!form.file && (
+            <div className="flex flex-col gap-1">
+              <label htmlFor="card-filesize" className="text-xs text-zinc-400 font-medium">File Size</label>
+              <input
+                id="card-filesize"
+                name="filesize"
+                value={form.filesize}
+                onChange={handleChange}
+                placeholder="e.g. 1.2mb"
+                className="bg-zinc-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-zinc-400 placeholder:text-zinc-600"
+              />
+            </div>
+          )}
 
           {/* Card Color Picker */}
           <div role="group" aria-labelledby="card-color-label" className="flex flex-col gap-2">
@@ -178,13 +249,20 @@ function AddCardForm({ onAdd, onClose }) {
             </AnimatePresence>
           </div>
 
+          {error && (
+            <p role="alert" className="text-xs text-red-400">
+              {error}
+            </p>
+          )}
+
           <motion.button
             type="submit"
+            disabled={saving}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
-            className="mt-2 bg-white text-zinc-900 font-semibold text-sm rounded-xl py-3 hover:bg-zinc-200 transition-colors duration-200"
+            className="mt-2 bg-white text-zinc-900 font-semibold text-sm rounded-xl py-3 hover:bg-zinc-200 transition-colors duration-200 disabled:opacity-60 disabled:cursor-wait"
           >
-            Add Document
+            {saving ? "Saving…" : "Add Document"}
           </motion.button>
         </form>
       </motion.div>

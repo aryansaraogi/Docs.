@@ -1,6 +1,6 @@
 # Docs. 📄
 
-A sleek, interactive document card manager built with React, Vite, Tailwind CSS, and Framer Motion. Cards are draggable on desktop, fully responsive across all devices, and persisted via localStorage.
+A sleek, interactive document card manager built with React, Vite, Tailwind CSS, and Framer Motion. Cards can hold real files, are draggable on desktop, fully responsive across all devices, and everything is saved in your browser.
 
 ---
 
@@ -8,11 +8,14 @@ A sleek, interactive document card manager built with React, Vite, Tailwind CSS,
 
 - **Draggable cards** — freely drag and reposition cards on desktop
 - **Add documents** — create new cards via a form (bottom sheet on mobile, modal on desktop)
+- **Real file attachments** — attach any file to a card; its size and file-type icon are filled in automatically
+- **Drag & drop files** — drop files anywhere on the page to create cards, or onto a card to attach/replace its file
+- **Working downloads** — the download button (and the tag banner, when shown) downloads the attached file
 - **Edit in place** — click the ✏️ icon on any card to edit title, description, file size, and color (Enter saves, Esc cancels)
 - **Delete any card** — including the default ones, with smooth exit animations
 - **Card color themes** — 5 color options: Zinc, Rose, Indigo, Amber, Teal
 - **Tag banners** — optional colored label strip at the bottom of each card
-- **Persistent storage** — all cards saved to `localStorage`, survive page refresh
+- **Persistent storage** — cards saved to `localStorage`, attached files to IndexedDB; both survive page refresh
 - **Fully responsive** — single column on mobile, multi-column grid on tablet/desktop
 - **Smooth animations** — spring-based enter/exit transitions powered by Framer Motion
 
@@ -27,13 +30,14 @@ A sleek, interactive document card manager built with React, Vite, Tailwind CSS,
 | [Tailwind CSS](https://tailwindcss.com/) | Utility-first styling |
 | [Framer Motion](https://www.framer.com/motion/) | Animations & drag |
 | [React Icons](https://react-icons.github.io/react-icons/) | Icon library |
+| [idb-keyval](https://github.com/jakearchibald/idb-keyval) | Stores attached files in IndexedDB |
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 20+
 - npm
 
 ### Installation
@@ -71,19 +75,35 @@ npm run preview
 
 Every `git push` to `main` triggers an automatic redeploy.
 
+GitHub Actions ([ci.yml](.github/workflows/ci.yml)) runs lint and a production build on every push and pull request.
+
+---
+
+## 🔒 Where your files are stored
+
+Attached files never leave your browser — there is no server. They're kept in this browser's IndexedDB, so they:
+
+- aren't synced to other browsers or devices
+- are removed if you clear this site's data
+- are only as durable as browser storage (the app asks the browser to keep them persistently)
+
 ---
 
 ## 📁 Project Structure
 ```
 Docs./
+├── .github/workflows/ci.yml  # Lint + build on push / PR
 ├── public/
 ├── src/
 │   ├── components/
 │   │   ├── Background.jsx   # Decorative "Docs." watermark
 │   │   ├── Foreground.jsx   # Card grid + state management
 │   │   ├── Card.jsx         # Individual draggable card
-│   │   └── AddCardForm.jsx  # Modal / bottom sheet form
+│   │   ├── AddCardForm.jsx  # Modal / bottom sheet form
+│   │   └── Toast.jsx        # Short on-screen messages
 │   ├── constants.js         # Card colors, default cards, storage key
+│   ├── fileStore.js         # Save / download / delete files in IndexedDB
+│   ├── fileUtils.js         # File size formatting and file-type icons
 │   ├── App.jsx
 │   ├── main.jsx
 │   └── index.css

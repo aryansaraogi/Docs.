@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { LuFileSpreadsheet } from "react-icons/lu";
-import { MdEdit, MdCheck } from "react-icons/md";
+import { MdEdit, MdCheck, MdOutlineFileDownload } from "react-icons/md";
 import { IoCloseSharp } from "react-icons/io5";
 import { motion, AnimatePresence } from "framer-motion";
 import { CARD_COLORS, TAG_COLORS } from "../constants";
+import { fileExt, formatBytes, getFileIcon } from "../fileUtils";
 
-function Card({ data, isMobile, dragConstraints, onDelete, onEdit }) {
+function Card({ data, isMobile, isDropTarget, dragConstraints, onDelete, onEdit, onDownload }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(data);
 
@@ -14,14 +14,23 @@ function Card({ data, isMobile, dragConstraints, onDelete, onEdit }) {
   const scheme = CARD_COLORS.find((c) => c.name === colorName) || CARD_COLORS[0];
   const canDrag = !isMobile && !isEditing;
 
+  const FileIcon = getFileIcon(data.file);
+  // Cards with a file show its type and real size; others show the typed-in size
+  const sizeLabel = data.file
+    ? [fileExt(data.file.name), formatBytes(data.file.size)].filter(Boolean).join(" · ")
+    : data.filesize;
+  const download = () => onDownload(data.id, data.file.name);
+
   const startEditing = () => {
     setDraft({ ...data });
     setIsEditing(true);
   };
 
   const handleSave = () => {
-    // A blank title keeps the previous one
-    onEdit(data.id, { ...draft, title: draft.title.trim() || data.title });
+    // Only the editable fields — a file dropped on the card mid-edit must not be overwritten.
+    // A blank title keeps the previous one.
+    const { desc, filesize, cardColor } = draft;
+    onEdit(data.id, { title: draft.title.trim() || data.title, desc, filesize, cardColor });
     setIsEditing(false);
   };
 
@@ -29,10 +38,17 @@ function Card({ data, isMobile, dragConstraints, onDelete, onEdit }) {
     if (e.key === "Escape") setIsEditing(false);
   };
 
+  // The tag banner downloads the file when there is one; otherwise it's just a label
+  const Banner = data.file ? motion.button : motion.div;
+  const bannerProps = data.file
+    ? { type: "button", onClick: download, "aria-label": `${data.tag.tagTitle}: download ${data.file.name}` }
+    : {};
+
   const cardContent = (
     <div
+      data-card-id={data.id}
       onKeyDown={isEditing ? handleKeyDown : undefined}
-      className={`relative w-full max-w-[15rem] h-72 rounded-[45px] ${scheme.bg} border ${scheme.border} text-white px-8 py-10 overflow-hidden shadow-2xl ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`relative w-full max-w-[15rem] h-72 rounded-[45px] ${scheme.bg} border ${scheme.border} text-white px-8 py-10 overflow-hidden shadow-2xl transition-shadow ${canDrag ? "cursor-grab active:cursor-grabbing" : ""} ${isDropTarget ? "ring-4 ring-white/70" : ""}`}
     >
       {/* Edit / Save button */}
       <motion.button
@@ -56,7 +72,7 @@ function Card({ data, isMobile, dragConstraints, onDelete, onEdit }) {
         </AnimatePresence>
       </motion.button>
 
-      <LuFileSpreadsheet className="text-white/50 text-lg" aria-hidden="true" />
+      <FileIcon className="text-white/50 text-lg" aria-hidden="true" />
 
       <AnimatePresence mode="wait">
         {isEditing ? (
@@ -78,13 +94,16 @@ function Card({ data, isMobile, dragConstraints, onDelete, onEdit }) {
               className="bg-white/10 rounded-lg px-2 py-1 text-xs w-full outline-none ring-1 ring-white/20 focus:ring-white/50 resize-none placeholder:text-white/30 transition-all"
               placeholder="Description"
             />
-            <input
-              aria-label="File size"
-              value={draft.filesize}
-              onChange={(e) => setDraft((p) => ({ ...p, filesize: e.target.value }))}
-              className="bg-white/10 rounded-lg px-2 py-1 text-xs w-full outline-none ring-1 ring-white/20 focus:ring-white/50 placeholder:text-white/30 transition-all"
-              placeholder="File size (e.g. 1.2mb)"
-            />
+            {/* A real file's size is automatic */}
+            {!data.file && (
+              <input
+                aria-label="File size"
+                value={draft.filesize}
+                onChange={(e) => setDraft((p) => ({ ...p, filesize: e.target.value }))}
+                className="bg-white/10 rounded-lg px-2 py-1 text-xs w-full outline-none ring-1 ring-white/20 focus:ring-white/50 placeholder:text-white/30 transition-all"
+                placeholder="File size (e.g. 1.2mb)"
+              />
+            )}
             {/* Color swatches — previewed live, committed on save */}
             <div className="flex gap-2 mt-1 items-center">
               <span className="text-[10px] text-white/40 mr-1">Color</span>
@@ -116,30 +135,46 @@ function Card({ data, isMobile, dragConstraints, onDelete, onEdit }) {
       <div className="footer absolute bottom-0 w-full left-0">
         {/* Hidden while editing — it would overlap the edit form above the tag banner */}
         {!isEditing && (
-          <div className="flex items-center justify-between px-8 py-3 mb-5">
-            <p className="text-white/35 text-xs">{data.filesize}</p>
-            <motion.button
-              type="button"
-              aria-label={`Delete ${data.title}`}
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.85 }}
-              className="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center hover:bg-red-500 transition-colors duration-200"
-              onClick={() => onDelete(data.id)}
-            >
-              <IoCloseSharp size="0.9em" />
-            </motion.button>
+          <div className="flex items-center justify-between gap-2 px-8 py-3 mb-5">
+            <p className="text-white/35 text-xs truncate min-w-0">{sizeLabel}</p>
+            <div className="flex items-center gap-2 shrink-0">
+              {data.file && (
+                <motion.button
+                  type="button"
+                  aria-label={`Download ${data.file.name}`}
+                  title={`Download ${data.file.name}`}
+                  whileHover={{ scale: 1.15 }}
+                  whileTap={{ scale: 0.85 }}
+                  className="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/25 transition-colors duration-200"
+                  onClick={download}
+                >
+                  <MdOutlineFileDownload size="1em" />
+                </motion.button>
+              )}
+              <motion.button
+                type="button"
+                aria-label={`Delete ${data.title}`}
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.85 }}
+                className="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center hover:bg-red-500 transition-colors duration-200"
+                onClick={() => onDelete(data.id)}
+              >
+                <IoCloseSharp size="0.9em" />
+              </motion.button>
+            </div>
           </div>
         )}
         <AnimatePresence>
           {data.tag.isOpen && (
-            <motion.div
+            <Banner
+              {...bannerProps}
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 30, opacity: 0 }}
-              className={`w-full py-4 ${TAG_COLORS[data.tag.tagColor] || TAG_COLORS.green} flex items-center justify-center`}
+              className={`w-full py-4 ${TAG_COLORS[data.tag.tagColor] || TAG_COLORS.green} flex items-center justify-center ${data.file ? "hover:brightness-110 transition-[filter]" : ""}`}
             >
               <span className="text-sm font-semibold">{data.tag.tagTitle}</span>
-            </motion.div>
+            </Banner>
           )}
         </AnimatePresence>
       </div>
