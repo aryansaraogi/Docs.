@@ -1,14 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { IoCloseSharp } from "react-icons/io5";
 import { motion, AnimatePresence } from "framer-motion";
-
-const CARD_COLORS = [
-  { name: "zinc",   swatch: "bg-zinc-500" },
-  { name: "rose",   swatch: "bg-rose-500" },
-  { name: "indigo", swatch: "bg-indigo-500" },
-  { name: "amber",  swatch: "bg-amber-500" },
-  { name: "teal",   swatch: "bg-teal-500" },
-];
+import { CARD_COLORS, DEFAULT_TAG } from "../constants";
 
 function AddCardForm({ onAdd, onClose }) {
   const [form, setForm] = useState({
@@ -16,24 +9,31 @@ function AddCardForm({ onAdd, onClose }) {
     desc: "",
     filesize: "",
     cardColor: "zinc",
-    tag: { isOpen: false, tagTitle: "Download Now", tagColor: "green" },
+    tag: { ...DEFAULT_TAG },
   });
 
+  // Close on Escape
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, checked } = e.target;
     if (name === "tagColor" || name === "tagTitle") {
       setForm((prev) => ({ ...prev, tag: { ...prev.tag, [name]: value } }));
     } else if (name === "tagIsOpen") {
       setForm((prev) => ({ ...prev, tag: { ...prev.tag, isOpen: checked } }));
     } else {
-      setForm((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+      setForm((prev) => ({ ...prev, [name]: value }));
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
-    onAdd({ ...form, close: true });
+    onAdd({ ...form, title: form.title.trim() });
   };
 
   return (
@@ -41,9 +41,14 @@ function AddCardForm({ onAdd, onClose }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      // pointerdown (not click) so a text selection that ends on the backdrop doesn't close the form
+      onPointerDown={(e) => e.target === e.currentTarget && onClose()}
       className="fixed inset-0 z-[10] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-0 sm:px-4"
     >
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-card-title"
         initial={{ opacity: 0, y: 80, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 80, scale: 0.95 }}
@@ -51,6 +56,8 @@ function AddCardForm({ onAdd, onClose }) {
         className="bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-8 w-full sm:w-80 text-white shadow-2xl border border-zinc-700 relative max-h-[90vh] overflow-y-auto"
       >
         <button
+          type="button"
+          aria-label="Close"
           onClick={onClose}
           className="absolute top-4 right-4 w-7 h-7 bg-zinc-700 rounded-full flex items-center justify-center hover:bg-zinc-500 transition-colors"
         >
@@ -60,13 +67,15 @@ function AddCardForm({ onAdd, onClose }) {
         {/* Drag handle for mobile sheet feel */}
         <div className="w-10 h-1 bg-zinc-600 rounded-full mx-auto mb-6 sm:hidden" />
 
-        <h2 className="text-lg font-bold mb-6 tracking-tight">New Document</h2>
+        <h2 id="add-card-title" className="text-lg font-bold mb-6 tracking-tight">New Document</h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-zinc-400 font-medium">Title *</label>
+            <label htmlFor="card-title" className="text-xs text-zinc-400 font-medium">Title *</label>
             <input
+              id="card-title"
               name="title"
+              autoFocus
               value={form.title}
               onChange={handleChange}
               placeholder="Document title"
@@ -76,8 +85,9 @@ function AddCardForm({ onAdd, onClose }) {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-zinc-400 font-medium">Description</label>
+            <label htmlFor="card-desc" className="text-xs text-zinc-400 font-medium">Description</label>
             <textarea
+              id="card-desc"
               name="desc"
               value={form.desc}
               onChange={handleChange}
@@ -88,8 +98,9 @@ function AddCardForm({ onAdd, onClose }) {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-zinc-400 font-medium">File Size</label>
+            <label htmlFor="card-filesize" className="text-xs text-zinc-400 font-medium">File Size</label>
             <input
+              id="card-filesize"
               name="filesize"
               value={form.filesize}
               onChange={handleChange}
@@ -99,13 +110,15 @@ function AddCardForm({ onAdd, onClose }) {
           </div>
 
           {/* Card Color Picker */}
-          <div className="flex flex-col gap-2">
-            <label className="text-xs text-zinc-400 font-medium">Card Color</label>
+          <div role="group" aria-labelledby="card-color-label" className="flex flex-col gap-2">
+            <span id="card-color-label" className="text-xs text-zinc-400 font-medium">Card Color</span>
             <div className="flex gap-4">
               {CARD_COLORS.map((c) => (
                 <motion.button
                   key={c.name}
                   type="button"
+                  aria-label={c.name}
+                  aria-pressed={form.cardColor === c.name}
                   whileHover={{ scale: 1.2 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => setForm((prev) => ({ ...prev, cardColor: c.name }))}
@@ -144,6 +157,7 @@ function AddCardForm({ onAdd, onClose }) {
                 >
                   <input
                     name="tagTitle"
+                    aria-label="Tag label"
                     value={form.tag.tagTitle}
                     onChange={handleChange}
                     placeholder="Tag label"
@@ -151,6 +165,7 @@ function AddCardForm({ onAdd, onClose }) {
                   />
                   <select
                     name="tagColor"
+                    aria-label="Tag color"
                     value={form.tag.tagColor}
                     onChange={handleChange}
                     className="bg-zinc-800 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-zinc-400"

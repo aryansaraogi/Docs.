@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Dark page background so overscroll/bounce never shows white */
+body {
+  @apply bg-zinc-900;
+}
+
 
 
 ::selection{

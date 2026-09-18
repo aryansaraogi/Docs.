@@ -8,7 +8,7 @@ A sleek, interactive document card manager built with React, Vite, Tailwind CSS,
 
 - **Draggable cards** — freely drag and reposition cards on desktop
 - **Add documents** — create new cards via a form (bottom sheet on mobile, modal on desktop)
-- **Edit in place** — click the ✏️ icon on any card to edit title, description, file size, and color
+- **Edit in place** — click the ✏️ icon on any card to edit title, description, file size, and color (Enter saves, Esc cancels)
 - **Delete any card** — including the default ones, with smooth exit animations
 - **Card color themes** — 5 color options: Zinc, Rose, Indigo, Amber, Teal
 - **Tag banners** — optional colored label strip at the bottom of each card
@@ -42,7 +42,7 @@ A sleek, interactive document card manager built with React, Vite, Tailwind CSS,
 git clone https://github.com/aryansaraogi/Docs..git
 
 # 2. Navigate into the project
-cd DOOS
+cd Docs.
 
 # 3. Install dependencies
 npm install
@@ -67,6 +67,7 @@ npm run preview
 
 ---
 
+## 🌐 Deployment
 
 Every `git push` to `main` triggers an automatic redeploy.
 
@@ -74,7 +75,7 @@ Every `git push` to `main` triggers an automatic redeploy.
 
 ## 📁 Project Structure
 ```
-docs/
+Docs./
 ├── public/
 ├── src/
 │   ├── components/
@@ -82,6 +83,7 @@ docs/
 │   │   ├── Foreground.jsx   # Card grid + state management
 │   │   ├── Card.jsx         # Individual draggable card
 │   │   └── AddCardForm.jsx  # Modal / bottom sheet form
+│   ├── constants.js         # Card colors, default cards, storage key
 │   ├── App.jsx
 │   ├── main.jsx
 │   └── index.css
@@ -117,4 +119,4 @@ docs/
 
 ## License
 
-MIT Aryan Saraogi
+[MIT](LICENSE) © Aryan Saraogi
