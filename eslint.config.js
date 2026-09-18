@@ -5,7 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist'] },
+  { ignores: ['dist', 'test-results', 'playwright-report', 'blob-report'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
@@ -36,5 +36,12 @@ export default [
         { allowConstantExport: true },
       ],
     },
+  },
+  // Playwright tests and config files run in Node
+  {
+    files: ['e2e/**/*.js', '*.config.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    // Playwright's fixture callback is named `use`; it isn't a React hook
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
   },
 ]

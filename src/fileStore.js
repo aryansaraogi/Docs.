@@ -1,4 +1,5 @@
 import { createStore, get, set, del, delMany, keys } from "idb-keyval";
+import { saveBlobAs } from "./fileUtils";
 
 // Attached files live in IndexedDB — localStorage only holds strings and ~5 MB.
 // Keys are String(card.id): IndexedDB treats 1 and "1" as different keys.
@@ -16,16 +17,13 @@ export async function saveFile(id, file) {
   }
 }
 
+// The stored File/Blob, or undefined when it's missing
+export const loadFile = (id) => get(key(id), store);
+
 export async function downloadFile(id, name) {
-  const blob = await get(key(id), store);
+  const blob = await loadFile(id);
   if (!blob) throw new Error(`No stored file for card ${id}`);
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement("a"), { href: url, download: name });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  // Revoke once the browser has started the download
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveBlobAs(blob, name);
 }
 
 export const deleteFile = (id) => del(key(id), store);

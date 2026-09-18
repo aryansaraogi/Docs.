@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { IoCloseSharp } from "react-icons/io5";
 import { LuUpload } from "react-icons/lu";
 import { motion, AnimatePresence } from "framer-motion";
 import { CARD_COLORS, DEFAULT_TAG } from "../constants";
 import { baseName, formatBytes, getFileIcon } from "../fileUtils";
+import useEscapeKey from "../hooks/useEscapeKey";
 
 function AddCardForm({ onAdd, onClose }) {
   const [form, setForm] = useState({
@@ -31,12 +32,7 @@ function AddCardForm({ onAdd, onClose }) {
   };
   const FileIcon = getFileIcon(form.file);
 
-  // Close on Escape
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   const handleChange = (e) => {
     const { name, value, checked } = e.target;

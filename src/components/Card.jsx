@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MdEdit, MdCheck, MdOutlineFileDownload } from "react-icons/md";
 import { IoCloseSharp } from "react-icons/io5";
 import { motion, AnimatePresence } from "framer-motion";
 import { CARD_COLORS, TAG_COLORS } from "../constants";
 import { fileExt, formatBytes, getFileIcon } from "../fileUtils";
 
-function Card({ data, isMobile, isDropTarget, dragConstraints, onDelete, onEdit, onDownload }) {
+function Card({ data, isMobile, isDropTarget, dragConstraints, onDelete, onEdit, onDownload, onOpen }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(data);
 
@@ -20,6 +20,16 @@ function Card({ data, isMobile, isDropTarget, dragConstraints, onDelete, onEdit,
     ? [fileExt(data.file.name), formatBytes(data.file.size)].filter(Boolean).join(" · ")
     : data.filesize;
   const download = () => onDownload(data.id, data.file.name);
+
+  // Clicking a card with a file opens its preview — but not a click on one of its controls,
+  // and not the click that ends a drag (the pointer moved)
+  const pointerStart = useRef(null);
+  const handleCardClick = (e) => {
+    if (!data.file || isEditing || e.target.closest("button, input, textarea, select, a")) return;
+    const start = pointerStart.current;
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return;
+    onOpen(data.id);
+  };
 
   const startEditing = () => {
     setDraft({ ...data });
@@ -48,6 +58,8 @@ function Card({ data, isMobile, isDropTarget, dragConstraints, onDelete, onEdit,
     <div
       data-card-id={data.id}
       onKeyDown={isEditing ? handleKeyDown : undefined}
+      onPointerDown={(e) => (pointerStart.current = { x: e.clientX, y: e.clientY })}
+      onClick={handleCardClick}
       className={`relative w-full max-w-[15rem] h-72 rounded-[45px] ${scheme.bg} border ${scheme.border} text-white px-8 py-10 overflow-hidden shadow-2xl transition-shadow ${canDrag ? "cursor-grab active:cursor-grabbing" : ""} ${isDropTarget ? "ring-4 ring-white/70" : ""}`}
     >
       {/* Edit / Save button */}
@@ -125,7 +137,21 @@ function Card({ data, isMobile, isDropTarget, dragConstraints, onDelete, onEdit,
           </motion.div>
         ) : (
           <motion.div key="view-mode" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.18 }}>
-            <h3 className="text-base leading-tight mt-3 font-bold truncate">{data.title}</h3>
+            <h3 className="text-base leading-tight mt-3 font-bold truncate">
+              {/* A button for keyboard users; mouse and touch can click anywhere on the card */}
+              {data.file ? (
+                <button
+                  type="button"
+                  title="Preview"
+                  onClick={() => onOpen(data.id)}
+                  className="max-w-full truncate text-left hover:underline focus-visible:underline underline-offset-2"
+                >
+                  {data.title}
+                </button>
+              ) : (
+                data.title
+              )}
+            </h3>
             <p className="text-sm leading-snug mt-2 text-white/50 line-clamp-3">{data.desc}</p>
           </motion.div>
         )}

@@ -1,41 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { LuDownload, LuUpload } from "react-icons/lu";
 import Card from "./Card";
 import AddCardForm from "./AddCardForm";
 import Toast from "./Toast";
-import { DEFAULT_DATA, DEFAULT_TAG, STORAGE_KEY } from "../constants";
+import FileViewer from "./FileViewer";
+import { DEFAULT_TAG, STORAGE_KEY } from "../constants";
+import { fileMeta, loadCards, mergeCards, newId } from "../cards";
 import { saveFile, deleteFile, downloadFile, pruneFiles } from "../fileStore";
 import { baseName } from "../fileUtils";
+import { BackupError, exportBackup, importBackup } from "../backup";
 
 const MOBILE_QUERY = "(max-width: 639px)";
 
-// Load cards from localStorage, tolerating missing, corrupt, or old-shape data
-function loadCards() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!Array.isArray(parsed)) return DEFAULT_DATA;
-    return parsed
-      .filter((c) => c && typeof c === "object" && c.id != null)
-      .map((c) => ({
-        title: "",
-        desc: "",
-        filesize: "",
-        cardColor: "zinc",
-        ...c,
-        tag: { ...DEFAULT_TAG, ...c.tag },
-      }));
-  } catch {
-    return DEFAULT_DATA;
-  }
-}
-
-// crypto.randomUUID is only available in secure contexts (https / localhost)
-const newId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-// What a card keeps about its file; the file itself lives in IndexedDB
-const fileMeta = (file) => ({ name: file.name, type: file.type, size: file.size });
-
 const isFileDrag = (e) => e.dataTransfer?.types.includes("Files");
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+const TOOLBAR_BUTTON =
+  "flex items-center gap-1.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white text-sm font-medium px-2.5 py-2 sm:px-3.5 backdrop-blur transition-colors disabled:opacity-50 disabled:cursor-wait";
 
 function Foreground() {
   const [showForm, setShowForm] = useState(false);
@@ -44,8 +26,19 @@ function Foreground() {
   const [toast, setToast] = useState(null);
   // While files are dragged over the page: { targetId } — the card id (string) under the pointer, or null
   const [fileDrag, setFileDrag] = useState(null);
+  // A backup export or import is running
+  const [busy, setBusy] = useState(false);
+  // Id of the card whose file is shown in the viewer
+  const [previewId, setPreviewId] = useState(null);
   // Cards can only be dragged within this area, so they can't be flung off-screen
   const containerRef = useRef(null);
+  const importInputRef = useRef(null);
+
+  // Closes by itself if the previewed card is deleted or loses its file
+  const previewCard = previewId != null ? data.find((c) => c.id === previewId && c.file) : null;
+  const closePreview = useCallback(() => setPreviewId(null), []);
+  // Page-level file drops are ignored while a dialog is open
+  const dialogOpen = showForm || previewCard != null;
 
   // Track small screens — disables drag on mobile
   useEffect(() => {
@@ -139,7 +132,7 @@ function Foreground() {
     const onOver = (e) => {
       if (!isFileDrag(e)) return;
       e.preventDefault();
-      if (showForm) return;
+      if (dialogOpen) return;
       const targetId = cardIdAt(e);
       setFileDrag((prev) => (prev?.targetId === targetId ? prev : { targetId }));
     };
@@ -147,7 +140,7 @@ function Foreground() {
       if (!isFileDrag(e)) return;
       e.preventDefault();
       reset();
-      if (!showForm && e.dataTransfer.files.length) handleDroppedFiles([...e.dataTransfer.files], cardIdAt(e));
+      if (!dialogOpen && e.dataTransfer.files.length) handleDroppedFiles([...e.dataTransfer.files], cardIdAt(e));
     };
 
     window.addEventListener("dragenter", onEnter);
@@ -160,7 +153,7 @@ function Foreground() {
       window.removeEventListener("dragover", onOver);
       window.removeEventListener("drop", onDrop);
     };
-  }, [showForm, handleDroppedFiles]);
+  }, [dialogOpen, handleDroppedFiles]);
 
   const handleDelete = (id) => {
     setData((prev) => prev.filter((c) => c.id !== id));
@@ -175,10 +168,67 @@ function Foreground() {
   const handleDownload = (id, name) =>
     downloadFile(id, name).catch(() => showToast("This file isn't stored in this browser anymore."));
 
+  const handleExport = async () => {
+    setBusy(true);
+    try {
+      const { count, missing } = await exportBackup(data);
+      const missingNote = missing ? ` · ${plural(missing, "file")} ${missing === 1 ? "was" : "were"} missing` : "";
+      showToast(`Backup downloaded · ${plural(count, "document")}${missingNote}`);
+    } catch {
+      showToast("Couldn't create the backup.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = ""; // so choosing the same file again still triggers a change
+    if (!file) return;
+    setBusy(true);
+    try {
+      const cards = await importBackup(file);
+      setData((prev) => mergeCards(prev, cards));
+      showToast(`Restored ${plural(cards.length, "document")}`);
+    } catch (err) {
+      showToast(err instanceof BackupError ? err.message : "Couldn't restore the backup. Browser storage may be full.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const dropTarget = fileDrag?.targetId != null ? data.find((c) => String(c.id) === fileDrag.targetId) : null;
 
   return (
     <>
+      {/* Backup — files live only in this browser, so this is how to keep or move them.
+          Icon-only on phones so the buttons don't cover the "Documents" heading. */}
+      <div className="fixed top-3 right-4 sm:top-5 sm:right-8 z-[6] flex gap-2">
+        <button
+          type="button"
+          aria-label="Export backup"
+          title="Download a backup of all documents"
+          disabled={busy}
+          onClick={handleExport}
+          className={TOOLBAR_BUTTON}
+        >
+          <LuDownload aria-hidden="true" />
+          <span className="hidden sm:inline">Export</span>
+        </button>
+        <button
+          type="button"
+          aria-label="Import backup"
+          title="Restore documents from a backup"
+          disabled={busy}
+          onClick={() => importInputRef.current.click()}
+          className={TOOLBAR_BUTTON}
+        >
+          <LuUpload aria-hidden="true" />
+          <span className="hidden sm:inline">Import</span>
+        </button>
+        <input ref={importInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={handleImport} />
+      </div>
+
       {/* Responsive scrollable grid — replaces fixed drag canvas on mobile */}
       <div ref={containerRef} className="relative z-[3] w-full min-h-screen px-4 sm:px-8 py-16 sm:py-24">
         <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 justify-items-center">
@@ -193,6 +243,7 @@ function Foreground() {
                 onDelete={handleDelete}
                 onEdit={handleEdit}
                 onDownload={handleDownload}
+                onOpen={setPreviewId}
               />
             ))}
           </AnimatePresence>
@@ -237,6 +288,12 @@ function Foreground() {
       <AnimatePresence>
         {showForm && (
           <AddCardForm onAdd={handleAdd} onClose={() => setShowForm(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {previewCard && (
+          <FileViewer key={previewCard.id} card={previewCard} onClose={closePreview} onDownload={handleDownload} />
         )}
       </AnimatePresence>
 
